@@ -275,8 +275,8 @@ IKS-cs/
 ### `backend/app/analysis/benchmark.py`
 - **Lines of Code**: ~80 lines
 - **Role**: Measures performance, execution latency, and throughput.
-- **Operation**:
-  - Evaluates payloads of sizes: 64B, 256B, 1KB, 4KB, 16KB.
+ - **Operation**:
+  - Evaluates a quick default matrix (64B, 256B, 1KB, ~2s) and an opt-in full matrix (up to 16KB) via `full=True`; explicit sizes are clamped to [8B, 64KB], max 5 entries.
   - Runs 50 warmup and timed iterations.
   - Reports: Block count, total encryption time (ms), throughput in KB/sec, and per-block latency ($\mu$s).
 

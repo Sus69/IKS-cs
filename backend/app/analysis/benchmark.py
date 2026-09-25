@@ -7,16 +7,33 @@ Measures encryption and decryption throughput across message sizes and round con
 import time
 import random
 import string
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from ..cipher.engine import Gudha64Cipher
 
+# Default matrix finishes in ~2s; the full matrix (with 4/16 KB) takes ~1 min
+# in pure Python, so the UI only runs it on explicit request.
+DEFAULT_SIZES = [64, 256, 1024]
+FULL_SIZES = [64, 256, 1024, 4096, 16384]
+MAX_SIZE_BYTES = 65536
+MAX_SIZES = 5
+
 def benchmark_cipher_performance(
-    sizes_bytes: List[int] = [64, 256, 1024, 4096, 16384],
-    rounds: int = 6
+    sizes_bytes: Optional[List[int]] = None,
+    rounds: int = 6,
+    full: bool = False
 ) -> Dict[str, Any]:
     """
     Executes timed encryption and decryption passes across varying payload sizes.
+    sizes_bytes=None selects the default (fast) or full matrix via `full`.
+    Explicit sizes are clamped to [8, 65536] bytes, max 5 entries, so one
+    request cannot pin the single worker process for minutes.
     """
+    if not (2 <= rounds <= 16):
+        raise ValueError("Rounds must be between 2 and 16")
+    if sizes_bytes is None:
+        sizes_bytes = FULL_SIZES if full else DEFAULT_SIZES
+    sizes_bytes = [min(max(int(s), 8), MAX_SIZE_BYTES) for s in sizes_bytes][:MAX_SIZES]
+
     cipher = Gudha64Cipher(key="BENCHMARK_KEY_ARTHASHASTRA", rounds=rounds)
     results: List[Dict[str, Any]] = []
 
@@ -33,7 +50,7 @@ def benchmark_cipher_performance(
         _ = cipher.encrypt(test_payload, record_trace=False)
 
         # Measure encryption (averaged over multiple iterations)
-        iterations = max(10, 5000 // (size + 1))
+        iterations = max(3, 2000 // (size + 1))
         
         t0 = time.perf_counter()
         for _ in range(iterations):
@@ -62,6 +79,7 @@ def benchmark_cipher_performance(
 
     return {
         "rounds": rounds,
+        "full": full or sizes_bytes == FULL_SIZES,
         "results": results,
         "note": "Benchmarks measured on pure Python software runtime."
     }

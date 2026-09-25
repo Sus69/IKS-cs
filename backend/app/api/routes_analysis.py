@@ -60,9 +60,9 @@ def get_frequency_analysis(req: FrequencyRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/benchmark")
-def get_benchmark(rounds: int = 6):
+def get_benchmark(rounds: int = 6, full: bool = False):
     try:
-        return benchmark_cipher_performance(rounds=rounds)
+        return benchmark_cipher_performance(rounds=rounds, full=full)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

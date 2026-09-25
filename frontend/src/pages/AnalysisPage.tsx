@@ -57,84 +57,93 @@ export const AnalysisPage: FC = () => {
   const [bfPin, setBfPin] = useState(1423);
   const [bfLoading, setBfLoading] = useState(false);
 
+  const isAbort = (e: unknown) => (e as Error)?.name === 'AbortError';
+
   // Run avalanche test
-  const runAvalanche = async () => {
+  const runAvalanche = async (signal?: AbortSignal) => {
     setAvalancheLoading(true);
     try {
-      const data = await getAvalancheApi(avalancheInput, avalancheKey, 6);
+      const data = await getAvalancheApi(avalancheInput, avalancheKey, 6, signal);
       setAvalancheData(data);
     } catch (e) {
-      console.error(e);
+      if (!isAbort(e)) console.error(e);
     } finally {
       setAvalancheLoading(false);
     }
   };
 
   // Run sensitivity tests
-  const runSensitivity = async () => {
+  const runSensitivity = async (signal?: AbortSignal) => {
     try {
       const [kData, pData] = await Promise.all([
-        getKeySensitivityApi('CONFIDENTIAL MAURYAN DISPATCH', 'KAUTILYA_A', 'KAUTILYA_B', 6),
-        getPlaintextSensitivityApi('HELLO WORLD', 'HELLO WORLE', 'ARTHASHASTRA_KEY', 6)
+        getKeySensitivityApi('CONFIDENTIAL MAURYAN DISPATCH', 'KAUTILYA_A', 'KAUTILYA_B', 6, signal),
+        getPlaintextSensitivityApi('HELLO WORLD', 'HELLO WORLE', 'ARTHASHASTRA_KEY', 6, signal)
       ]);
       setKeySensData(kData);
       setPtSensData(pData);
     } catch (e) {
-      console.error(e);
+      if (!isAbort(e)) console.error(e);
     }
   };
 
   // Run frequency test: encrypt the sample first so plaintext and
   // ciphertext entropy are measured on a genuine matched pair.
-  const runFrequency = async () => {
+  const runFrequency = async (signal?: AbortSignal) => {
     try {
       // Natural language test sample with high character repetition
       const sample = 'ARTHASHASTRA EMPHASIZES SYSTEMATIC STATE SECRET INTEGRITY AND INTELLIGENCE DISPATCHES.';
-      const enc = await encryptApi(sample, 'ARTHASHASTRA_KEY', 6, false);
-      const data = await getFrequencyApi(sample, enc.ciphertext_hex);
+      const enc = await encryptApi(sample, 'ARTHASHASTRA_KEY', 6, false, 'ecb', undefined, false, signal);
+      const data = await getFrequencyApi(sample, enc.ciphertext_hex, signal);
       setFreqData(data);
     } catch (e) {
-      console.error(e);
+      if (!isAbort(e)) console.error(e);
     }
   };
 
-  // Run benchmark
-  const runBenchmark = async () => {
+  // Run benchmark: quick matrix by default; full 16 KB matrix only on request
+  const runBenchmark = async (full: boolean = false, signal?: AbortSignal) => {
     setBenchLoading(true);
     try {
-      const data = await getBenchmarkApi(6);
+      const data = await getBenchmarkApi(6, full, signal);
       setBenchData(data);
     } catch (e) {
-      console.error(e);
+      if (!isAbort(e)) console.error(e);
     } finally {
       setBenchLoading(false);
     }
   };
 
   // Run attacks demo
-  const runAttacksDemo = async () => {
+  const runAttacksDemo = async (signal?: AbortSignal) => {
     setBfLoading(true);
     try {
       const [fDemo, bDemo] = await Promise.all([
-        getFrequencyDemoApi(),
-        getBruteForceDemoApi(bfPin, 12)
+        getFrequencyDemoApi(signal),
+        getBruteForceDemoApi(bfPin, 12, signal)
       ]);
       setFreqDemoData(fDemo);
       setBfDemoData(bDemo);
     } catch (e) {
-      console.error(e);
+      if (!isAbort(e)) console.error(e);
     } finally {
       setBfLoading(false);
     }
   };
 
+  // Lazy per-tab fetching: only the visible tab loads, and switching tabs
+  // aborts in-flight requests so the single dev-server worker never queues
+  // minutes of orphaned work behind a tab the user already left.
   useEffect(() => {
-    runAvalanche();
-    runSensitivity();
-    runFrequency();
-    runBenchmark();
-    runAttacksDemo();
-  }, []);
+    const ctrl = new AbortController();
+    const signal = ctrl.signal;
+    if (activeSubTab === 'avalanche' && !avalancheData) void runAvalanche(signal);
+    else if (activeSubTab === 'sensitivity' && (!keySensData || !ptSensData)) void runSensitivity(signal);
+    else if (activeSubTab === 'frequency' && !freqData) void runFrequency(signal);
+    else if (activeSubTab === 'benchmark' && !benchData) void runBenchmark(false, signal);
+    else if (activeSubTab === 'attacks' && (!freqDemoData || !bfDemoData)) void runAttacksDemo(signal);
+    return () => ctrl.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSubTab]);
 
   return (
     <div className="analysis-page">
@@ -195,7 +204,7 @@ export const AnalysisPage: FC = () => {
                 <Zap className="text-gold" size={20} />
                 <span>Strict Avalanche Criterion (SAC) Verification</span>
               </div>
-              <button className="btn btn-secondary btn-sm" onClick={runAvalanche} disabled={avalancheLoading}>
+              <button className="btn btn-secondary btn-sm" onClick={() => runAvalanche()} disabled={avalancheLoading}>
                 <RefreshCw size={14} className={avalancheLoading ? 'spin' : ''} />
                 <span>{avalancheLoading ? 'Testing...' : 'Re-run Test'}</span>
               </button>
@@ -434,10 +443,21 @@ export const AnalysisPage: FC = () => {
               <Clock className="text-gold" size={20} />
               <span>Execution Latency & Throughput Benchmark</span>
             </div>
-            <button className="btn btn-secondary btn-sm" onClick={runBenchmark} disabled={benchLoading}>
-              <RefreshCw size={14} className={benchLoading ? 'spin' : ''} />
-              <span>{benchLoading ? 'Benchmarking...' : 'Run Benchmark'}</span>
-            </button>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => runBenchmark(false)} disabled={benchLoading}>
+                <RefreshCw size={14} className={benchLoading ? 'spin' : ''} />
+                <span>{benchLoading ? 'Benchmarking...' : 'Run Quick Benchmark'}</span>
+              </button>
+              <button
+                className="btn btn-cyan btn-sm"
+                onClick={() => runBenchmark(true)}
+                disabled={benchLoading}
+                title="Full matrix up to 16 KB payloads; takes about a minute in pure Python"
+              >
+                <Clock size={14} />
+                <span>Run Full Matrix (~1 min)</span>
+              </button>
+            </div>
           </div>
 
           {benchData && (
@@ -466,6 +486,9 @@ export const AnalysisPage: FC = () => {
               </table>
 
               <div style={{ marginTop: '1rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                {benchData.full
+                  ? 'Full matrix (64 B – 16 KB). '
+                  : 'Quick matrix (64 B – 1 KB); use the full matrix for large-payload behavior. '}
                 {benchData.note} (6 Rounds SPN in Python runtime).
               </div>
             </div>
@@ -552,7 +575,7 @@ export const AnalysisPage: FC = () => {
                   onChange={(e) => setBfPin(Number(e.target.value))}
                   placeholder="Target PIN..."
                 />
-                <button className="btn btn-cyan btn-sm" onClick={runAttacksDemo} disabled={bfLoading}>
+                <button className="btn btn-cyan btn-sm" onClick={() => runAttacksDemo()} disabled={bfLoading}>
                   <Play size={14} />
                   <span>{bfLoading ? 'Cracking...' : 'Run Brute Force'}</span>
                 </button>

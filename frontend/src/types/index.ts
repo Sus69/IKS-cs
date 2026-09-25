@@ -122,6 +122,7 @@ export interface FrequencyResponse {
 
 export interface BenchmarkResponse {
   rounds: number;
+  full: boolean;
   results: Array<{
     size_bytes: number;
     size_label: string;
