@@ -2,7 +2,7 @@
 Pydantic Schemas for GŪḌHA API
 """
 
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field
 
 class EncryptRequest(BaseModel):
@@ -10,12 +10,18 @@ class EncryptRequest(BaseModel):
     key: str = Field(..., description="Passphrase or secret key", min_length=1)
     rounds: int = Field(6, ge=2, le=16, description="Number of transformation rounds (2-16)")
     record_trace: bool = Field(True, description="Whether to capture step-by-step derivation history")
+    mode: Literal["ecb", "cbc"] = Field("ecb", description="Block mode: ecb (default) or cbc (chained, needs IV)")
+    iv_hex: Optional[str] = Field(None, description="Optional 16-hex-char IV for CBC; server generates one if omitted")
+    authenticate: bool = Field(False, description="Return an HMAC-SHA256 tag over the ciphertext for tamper detection")
 
 class DecryptRequest(BaseModel):
     ciphertext_hex: str = Field(..., description="Hexadecimal-encoded ciphertext", min_length=2)
     key: str = Field(..., description="Passphrase or secret key used for encryption", min_length=1)
     rounds: int = Field(6, ge=2, le=16, description="Number of transformation rounds used during encryption")
     record_trace: bool = Field(False, description="Whether to capture step-by-step reverse derivation history")
+    mode: Literal["ecb", "cbc"] = Field("ecb", description="Block mode used during encryption")
+    iv_hex: Optional[str] = Field(None, description="IV returned by encrypt (required for CBC)")
+    auth_tag_hex: Optional[str] = Field(None, description="HMAC tag from encrypt; verified before decryption when provided")
 
 class StepTraceItem(BaseModel):
     block_index: int
@@ -34,6 +40,9 @@ class EncryptResponse(BaseModel):
     ciphertext_hex: str
     block_count: int
     rounds: int
+    mode: str
+    iv_hex: Optional[str] = None
+    auth_tag_hex: Optional[str] = None
     master_key_hex: str
     round_keys_hex: List[str]
     derivation_trace: List[StepTraceItem]
@@ -45,6 +54,7 @@ class DecryptResponse(BaseModel):
     plaintext: str
     block_count: int
     rounds: int
+    mode: str
     derivation_trace: List[StepTraceItem]
 
 class AvalancheRequest(BaseModel):

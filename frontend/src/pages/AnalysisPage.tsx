@@ -12,6 +12,7 @@ import {
   Percent
 } from 'lucide-react';
 import {
+  encryptApi,
   getAvalancheApi,
   getKeySensitivityApi,
   getPlaintextSensitivityApi,
@@ -83,13 +84,14 @@ export const AnalysisPage: FC = () => {
     }
   };
 
-  // Run frequency test
+  // Run frequency test: encrypt the sample first so plaintext and
+  // ciphertext entropy are measured on a genuine matched pair.
   const runFrequency = async () => {
     try {
       // Natural language test sample with high character repetition
       const sample = 'ARTHASHASTRA EMPHASIZES SYSTEMATIC STATE SECRET INTEGRITY AND INTELLIGENCE DISPATCHES.';
-      const encSampleHex = 'B8F12A093CE458D761A9B0C5238FE14D9842ACDF109356AE';
-      const data = await getFrequencyApi(sample, encSampleHex);
+      const enc = await encryptApi(sample, 'ARTHASHASTRA_KEY', 6, false);
+      const data = await getFrequencyApi(sample, enc.ciphertext_hex);
       setFreqData(data);
     } catch (e) {
       console.error(e);

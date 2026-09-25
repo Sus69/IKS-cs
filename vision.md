@@ -168,7 +168,7 @@ To ground the computational engine in genuine Indian Knowledge Systems without p
 - **IAST Transliteration**: *Pramāṇa*
 - **Grammatical Etymology**: Prefix **प्र (pra - forth, properly)** + root **मा (mā - to measure)** + suffix **अन (ana)**. Literally: *valid means of knowledge, measure, proof*.
 - **Historical Provenance**: Indian epistemology (*Nyāya Darśana*), where *pramāṇa* is the rigorous philosophical criterion for establishing objective truth through perception (*pratyakṣa*), inference (*anumāna*), and verification.
-- **Computational Correspondence**: The **Automated Verification & Test Suite**. The 38 pytest automated unit tests, Strict Avalanche Criterion (SAC) tests, Shannon entropy calculations, and roundtrip mathematical proofs.
+- **Computational Correspondence**: The **Automated Verification & Test Suite**. The 51 pytest automated unit tests, Strict Avalanche Criterion (SAC) tests, Shannon entropy calculations, and roundtrip mathematical proofs.
 
 ---
 

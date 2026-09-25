@@ -30,6 +30,10 @@ export const LabPage: FC<LabPageProps> = ({ onGoToAnalysis }) => {
   const [ciphertextHex, setCiphertextHex] = useState('');
   const [key, setKey] = useState('KAUTILYA_CHANAKYA');
   const [rounds, setRounds] = useState(6);
+  const [blockMode, setBlockMode] = useState<'ecb' | 'cbc'>('ecb');
+  const [ivHex, setIvHex] = useState('');
+  const [authenticate, setAuthenticate] = useState(false);
+  const [authTag, setAuthTag] = useState('');
   
   const [encryptResult, setEncryptResult] = useState<EncryptResponse | null>(null);
   const [decryptResult, setDecryptResult] = useState<DecryptResponse | null>(null);
@@ -51,9 +55,11 @@ export const LabPage: FC<LabPageProps> = ({ onGoToAnalysis }) => {
     setErrorMsg('');
     setIsLoading(true);
     try {
-      const res = await encryptApi(plaintext, key, rounds, true);
+      const res = await encryptApi(plaintext, key, rounds, true, blockMode, undefined, authenticate);
       setEncryptResult(res);
       setCiphertextHex(res.ciphertext_hex);
+      setIvHex(res.iv_hex || '');
+      setAuthTag(res.auth_tag_hex || '');
       setCurrentStepIndex(0);
       setIsPlaying(false);
     } catch (err: any) {
@@ -67,7 +73,7 @@ export const LabPage: FC<LabPageProps> = ({ onGoToAnalysis }) => {
     setErrorMsg('');
     setIsLoading(true);
     try {
-      const res = await decryptApi(ciphertextHex, key, rounds, true);
+      const res = await decryptApi(ciphertextHex, key, rounds, true, blockMode, ivHex || undefined, authTag || undefined);
       setDecryptResult(res);
       setPlaintext(res.plaintext);
       setCurrentStepIndex(0);
@@ -305,6 +311,67 @@ export const LabPage: FC<LabPageProps> = ({ onGoToAnalysis }) => {
             </div>
           </div>
 
+          <div className="grid-2" style={{ gap: '1rem', marginBottom: '1.25rem' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Block Mode</label>
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${blockMode === 'ecb' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setBlockMode('ecb')}
+                  title="ECB: independent blocks (leaks equal blocks; demo default)"
+                >
+                  ECB
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${blockMode === 'cbc' ? 'btn-primary' : 'btn-secondary'}`}
+                  onClick={() => setBlockMode('cbc')}
+                  title="CBC: chained blocks hide repeats (recommended)"
+                >
+                  CBC
+                </button>
+              </div>
+            </div>
+
+            {blockMode === 'cbc' && (
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">IV (16 hex chars, auto-generated on encrypt)</label>
+                <input
+                  type="text"
+                  className="form-control mono"
+                  value={ivHex}
+                  onChange={(e) => setIvHex(e.target.value)}
+                  placeholder="e.g. 0011223344556677"
+                />
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '1.25rem' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.85rem', color: 'var(--text-secondary)', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={authenticate}
+                onChange={(e) => setAuthenticate(e.target.checked)}
+              />
+              <span>Authenticate with HMAC-SHA256 tag (tamper detection)</span>
+            </label>
+          </div>
+
+          {mode === 'decrypt' && (
+            <div className="form-group">
+              <label className="form-label">HMAC Tag (optional, verified if provided)</label>
+              <input
+                type="text"
+                className="form-control mono"
+                value={authTag}
+                onChange={(e) => setAuthTag(e.target.value)}
+                placeholder="64-hex-char tag from encryption..."
+              />
+            </div>
+          )}
+
           <div style={{ display: 'flex', gap: '0.8rem' }}>
             {mode === 'encrypt' ? (
               <button className="btn btn-primary" onClick={handleEncrypt} disabled={isLoading} style={{ flex: 1 }}>
@@ -351,6 +418,22 @@ export const LabPage: FC<LabPageProps> = ({ onGoToAnalysis }) => {
                   <div className="badge badge-gold">Blocks: {encryptResult.block_count}</div>
                   <div className="badge badge-cyan">Rounds: {encryptResult.rounds}</div>
                   <div className="badge badge-emerald">Key Schedule: {encryptResult.round_keys_hex.length} Subkeys</div>
+                  <div className="badge badge-cyan">Mode: {encryptResult.mode.toUpperCase()}</div>
+                  {encryptResult.mode === 'cbc' && encryptResult.iv_hex && (
+                    <div className="badge badge-gold">IV: {encryptResult.iv_hex}</div>
+                  )}
+                  {encryptResult.auth_tag_hex && (
+                    <div className="badge badge-emerald">HMAC: {encryptResult.auth_tag_hex.slice(0, 16)}…</div>
+                  )}
+                </div>
+              )}
+
+              {encryptResult && encryptResult.auth_tag_hex && (
+                <div style={{ marginTop: '0.8rem' }}>
+                  <label className="form-label">HMAC-SHA256 Tag (use for decrypt verification)</label>
+                  <div className="hex-display" style={{ minHeight: '0', fontSize: '0.78rem' }}>
+                    {encryptResult.auth_tag_hex}
+                  </div>
                 </div>
               )}
             </div>

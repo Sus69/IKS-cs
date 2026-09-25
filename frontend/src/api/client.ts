@@ -18,12 +18,15 @@ export async function encryptApi(
   plaintext: string,
   key: string,
   rounds: number = 6,
-  recordTrace: boolean = true
+  recordTrace: boolean = true,
+  mode: string = 'ecb',
+  ivHex?: string,
+  authenticate: boolean = false
 ): Promise<EncryptResponse> {
   const res = await fetch(`${API_BASE}/cipher/encrypt`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ plaintext, key, rounds, record_trace: recordTrace })
+    body: JSON.stringify({ plaintext, key, rounds, record_trace: recordTrace, mode, iv_hex: ivHex ?? null, authenticate })
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Encryption request failed' }));
@@ -36,12 +39,15 @@ export async function decryptApi(
   ciphertextHex: string,
   key: string,
   rounds: number = 6,
-  recordTrace: boolean = false
+  recordTrace: boolean = false,
+  mode: string = 'ecb',
+  ivHex?: string,
+  authTagHex?: string
 ): Promise<DecryptResponse> {
   const res = await fetch(`${API_BASE}/cipher/decrypt`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ciphertext_hex: ciphertextHex, key, rounds, record_trace: recordTrace })
+    body: JSON.stringify({ ciphertext_hex: ciphertextHex, key, rounds, record_trace: recordTrace, mode, iv_hex: ivHex ?? null, auth_tag_hex: authTagHex ?? null })
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: 'Decryption request failed' }));

@@ -59,7 +59,7 @@ IKS-cs/
 │   │       ├── routes_cipher.py   # /api/cipher/encrypt, /decrypt, /components
 │   │       ├── routes_analysis.py # /api/analysis/avalanche, /sensitivity, /frequency, /demo/*
 │   │       └── routes_history.py  # /api/history/context, /arthashastra-chapters
-│   └── tests/                     # 38 automated pytest test suites
+│   └── tests/                     # 51 automated pytest test cases
 │       ├── __init__.py            # Test package marker
 │       ├── test_cipher_roundtrip.py # Invertibility across UTF-8 strings and edge cases
 │       ├── test_key_schedule.py   # Determinism, subkey uniqueness, and bit diffusion
@@ -100,7 +100,7 @@ IKS-cs/
   - Academic disclaimer: Inspires modern design from Arthaśāstra doctrines without falsely claiming ancient origin for modern algorithms.
   - Architecture overview: 64-bit block, 128-bit key, SPN architecture, 256-element S-Box, circulant matrix diffusion.
   - Setup instructions for both FastAPI backend (`uvicorn`) and React frontend (`npm run dev`).
-  - Summary of automated test coverage (38 tests).
+  - Summary of automated test coverage (51 tests).
 
 ### `detail.md` (This File)
 - **Location**: `c:\Users\manaa\Documents\IKS-cs\detail.md`
@@ -300,10 +300,10 @@ IKS-cs/
 - **Lines of Code**: ~110 lines
 - **Role**: Pydantic v2 data transfer objects (DTOs) providing strict schema enforcement, automatic JSON serialization, and OpenAPI Swagger documentation.
 - **Key Schemas**:
-  - `EncryptRequest`: `plaintext` (str), `key` (str), `rounds` (int, 2–16), `include_trace` (bool).
-  - `EncryptResponse`: `ciphertext_hex`, `block_count`, `rounds`, `round_keys_hex`, `derivation_trace`.
-  - `DecryptRequest`: `ciphertext_hex` (str), `key` (str), `rounds` (int), `include_trace` (bool).
-  - `DecryptResponse`: `plaintext`, `block_count`, `rounds`, `derivation_trace`.
+  - `EncryptRequest`: `plaintext` (str), `key` (str), `rounds` (int, 2–16), `record_trace` (bool), `mode` ("ecb" | "cbc"), `iv_hex` (optional), `authenticate` (bool).
+  - `EncryptResponse`: `ciphertext_hex`, `block_count`, `rounds`, `mode`, `iv_hex`, `auth_tag_hex`, `round_keys_hex`, `derivation_trace`.
+  - `DecryptRequest`: `ciphertext_hex` (str), `key` (str), `rounds` (int), `record_trace` (bool), `mode`, `iv_hex`, `auth_tag_hex` (expected tag, verified when provided).
+  - `DecryptResponse`: `plaintext`, `block_count`, `rounds`, `mode`, `derivation_trace`.
   - `StepTraceItem`: Granular derivation step schema (`block_index`, `round_index`, `step_name`, `sanskrit_name`, `shannon_principle`, `description`, `state_hex`, `state_bytes`, `round_key_hex`).
   - `AvalancheResponse`, `SensitivityResponse`, `FrequencyResponse`, `BenchmarkResponse`, `BruteForceResponse`, `FrequencyAnalysisResponse`.
   - `HistoricalContextResponse`, `ArthashastraChapterResponse`.
@@ -316,7 +316,7 @@ IKS-cs/
 - **Lines of Code**: ~60 lines
 - **Role**: FastAPI ASGI application factory.
 - **Configuration**:
-  - Enables CORS middleware (`allow_origins=["*"]`, `allow_methods=["*"]`, `allow_headers=["*"]`).
+  - Enables CORS middleware restricted to local dev origins (`http://localhost:5173`, `127.0.0.1:5173`, `localhost:3000`, `127.0.0.1:3000`) with `allow_credentials=False` (never wildcard + credentials).
   - Registers sub-routers with prefixes:
     - `/api/cipher` $\to$ `routes_cipher.router`
     - `/api/analysis` $\to$ `routes_analysis.router`
@@ -327,8 +327,8 @@ IKS-cs/
 ### `backend/app/api/routes_cipher.py`
 - **Lines of Code**: ~85 lines
 - **Endpoints**:
-  - `POST /api/cipher/encrypt`: Encrypts plaintext and returns hex ciphertext with optional derivation trace.
-  - `POST /api/cipher/decrypt`: Decrypts hex ciphertext, verifies PKCS#7 padding, and returns UTF-8 plaintext.
+  - `POST /api/cipher/encrypt`: Encrypts plaintext (ECB default, opt-in CBC with IV) with optional derivation trace and optional HMAC-SHA256 tag (`authenticate=True`).
+  - `POST /api/cipher/decrypt`: Decrypts hex ciphertext, verifies HMAC tag when provided (constant-time, before unpadding), enforces strict UTF-8, and returns uniform HTTP 400 on all failures.
   - `GET /api/cipher/components`: Returns S-Box tables, diffusion matrix, and bit-permutation vectors for external verification.
 
 ### `backend/app/api/routes_analysis.py`
@@ -351,7 +351,7 @@ IKS-cs/
 
 ## 7. Automated Verification & Test Suite (`backend/tests/`)
 
-### Test Suite Summary: **All 38 Tests Passing** in 0.65s
+### Test Suite Summary: **All 51 Tests Passing**
 - Run command: `pytest backend/tests/ -v`
 
 ### `backend/tests/test_cipher_roundtrip.py` (17 tests)
@@ -387,6 +387,12 @@ IKS-cs/
 
 ### `backend/tests/test_api.py` (5 tests)
 - Uses FastAPI `TestClient` to verify HTTP 200 responses, schema validity, and error handling for `/api/cipher/encrypt`, `/api/cipher/decrypt`, `/api/analysis/avalanche`, and `/api/history/context`.
+
+### `backend/tests/test_cbc_mode.py` (7 tests)
+- Verifies the ECB default preserves the golden vector, CBC round-trips with `iv_hex`, CBC hides repeated plaintext blocks, random IVs diverge, and invalid modes/IVs are rejected (plus HTTP-level CBC round-trip and uniform-400 on missing IV).
+
+### `backend/tests/test_auth.py` (6 tests)
+- Verifies HMAC-SHA256 round-trip, tamper detection, wrong-key rejection, strict UTF-8 decoding (no latin1 fallback), and uniform HTTP 400 across bad-hex/unaligned/corrupt-padding inputs plus HTTP tag verification.
 
 ---
 
@@ -542,7 +548,8 @@ IKS-cs/
 
 ## 12. Verification & Build Integrity
 
-- **Backend Pytest Suite**: 38 of 38 tests passing (`pytest backend/tests/ -v`).
+- **Backend Pytest Suite**: 51 of 51 tests passing (`pytest backend/tests/ -v`), including CBC mode and HMAC authentication suites.
+- **CI**: `.github/workflows/ci.yml` runs the backend suite and the frontend typecheck/build on push and pull requests.
 - **Frontend TypeScript Build**: `npm run build` (`tsc -b && vite build`) executes in <600ms with **0 errors and 0 warnings**.
 - **Services Active**:
   - Backend API: `http://127.0.0.1:8000` (Swagger docs: `/docs`).

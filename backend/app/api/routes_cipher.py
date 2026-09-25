@@ -18,7 +18,7 @@ def encrypt_message(req: EncryptRequest):
     """
     try:
         cipher = Gudha64Cipher(key=req.key, rounds=req.rounds)
-        result = cipher.encrypt(req.plaintext, record_trace=req.record_trace)
+        result = cipher.encrypt(req.plaintext, record_trace=req.record_trace, mode=req.mode, iv_hex=req.iv_hex, authenticate=req.authenticate)
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -31,12 +31,12 @@ def decrypt_message(req: DecryptRequest):
     """
     try:
         cipher = Gudha64Cipher(key=req.key, rounds=req.rounds)
-        result = cipher.decrypt(req.ciphertext_hex, record_trace=req.record_trace)
+        result = cipher.decrypt(req.ciphertext_hex, record_trace=req.record_trace, mode=req.mode, iv_hex=req.iv_hex, expected_tag=req.auth_tag_hex)
         return result
-    except ValueError as ve:
-        raise HTTPException(status_code=422, detail=f"Decryption failed: {str(ve)}")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        # Uniform 400 for all decryption failures (bad hex, length, padding,
+        # auth mismatch, UTF-8) so status codes don't leak padding state.
+        raise HTTPException(status_code=400, detail=f"Decryption failed: {str(e)}")
 
 @router.get("/components")
 def get_cipher_components():

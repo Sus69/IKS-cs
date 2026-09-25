@@ -16,6 +16,9 @@ export interface EncryptResponse {
   ciphertext_hex: string;
   block_count: number;
   rounds: number;
+  mode: string;
+  iv_hex?: string | null;
+  auth_tag_hex?: string | null;
   master_key_hex: string;
   round_keys_hex: string[];
   derivation_trace: StepTraceItem[];
@@ -28,6 +31,7 @@ export interface DecryptResponse {
   plaintext: string;
   block_count: number;
   rounds: number;
+  mode: string;
   derivation_trace: StepTraceItem[];
 }
 

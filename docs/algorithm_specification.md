@@ -89,3 +89,29 @@ $$\text{InvSub}(\text{InvPerm}(\text{InvMix}(\text{Mix}(\text{Perm}(\text{Sub}(X
 and because bitwise XOR is self-inverting ($A \oplus B \oplus B = A$), the round-trip identity:
 $$\forall P, K: \quad \text{Decrypt}_K(\text{Encrypt}_K(P)) = P$$
 holds unconditionally.
+
+---
+
+## 5. Block Modes
+
+The block cipher above operates on single 8-byte blocks. Multi-block messages support two modes:
+
+### ECB (Electronic Codebook, default)
+Each padded block is encrypted independently:
+$$C_i = \text{EncryptBlock}(P_i), \quad \forall i$$
+Identical plaintext blocks yield identical ciphertext blocks. Kept as the default for demo compatibility and golden-vector stability; not recommended for structured messages.
+
+### CBC (Cipher Block Chaining, opt-in)
+Each block is XORed with the previous ciphertext block (or a random 8-byte IV for the first block) before encryption:
+$$C_0 = \text{EncryptBlock}(P_0 \oplus IV), \quad C_i = \text{EncryptBlock}(P_i \oplus C_{i-1})$$
+Decryption reverses the chain after block decryption:
+$$P_0 = \text{DecryptBlock}(C_0) \oplus IV, \quad P_i = \text{DecryptBlock}(C_i) \oplus C_{i-1}$$
+The IV is generated with a cryptographic RNG when omitted and must be supplied (`iv_hex`) for decryption. Chaining steps are recorded in the derivation trace (`CBC Chaining XOR` / `CBC Unchaining XOR`).
+
+---
+
+## 6. Authentication (HMAC-SHA256, opt-in)
+
+With `authenticate=True`, encryption additionally returns:
+$$\text{tag} = \text{HMAC-SHA256}(\text{master\_key}, \text{ciphertext})$$
+Decryption with `expected_tag` verifies the tag with a constant-time comparison *before* unpadding and raises on mismatch, providing encrypt-then-MAC tamper detection. All decryption failures (bad hex, length, padding, auth mismatch, non-UTF8 output) surface as a single error class so callers cannot distinguish padding state.

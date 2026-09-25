@@ -5,7 +5,8 @@ Measures encryption and decryption throughput across message sizes and round con
 """
 
 import time
-import os
+import random
+import string
 from typing import Dict, Any, List
 from ..cipher.engine import Gudha64Cipher
 
@@ -20,7 +21,13 @@ def benchmark_cipher_performance(
     results: List[Dict[str, Any]] = []
 
     for size in sizes_bytes:
-        test_payload = os.urandom(size)
+        # Printable-ASCII payload: valid UTF-8 so the decrypt path (which
+        # strictly decodes UTF-8 since the auth-hardening change) round-trips.
+        # os.urandom bytes would fail strict decoding and poison the timing.
+        test_payload = "".join(
+            random.choice(string.ascii_letters + string.digits + " ")
+            for _ in range(size)
+        )
         
         # Warmup
         _ = cipher.encrypt(test_payload, record_trace=False)

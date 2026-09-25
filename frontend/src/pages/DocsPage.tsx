@@ -177,14 +177,16 @@ This JSON telemetry powers the frontend Derivation Studio for step-by-step playb
     number: 13,
     title: 'Test Cases & Automated Verification',
     summary: 'Pytest suite verifying correctness invariants.',
-    content: `The system contains 38 automated unit and integration tests:
-- test_cipher_roundtrip.py: Validates Decrypt(Encrypt(P, K), K) == P across 1,000 randomized plaintexts and keys.
+    content: `The system contains 51 automated unit and integration tests:
+- test_cipher_roundtrip.py: Validates Decrypt(Encrypt(P, K), K) == P across 50 randomized keys/messages plus parametrized length and round sweeps.
+- test_cbc_mode.py: Validates ECB default stability, CBC chaining round-trips, repeated-block hiding, and IV/mode rejection.
+- test_auth.py: Validates HMAC-SHA256 tamper detection, strict UTF-8 decoding, and uniform HTTP 400 errors.
 - test_edge_cases.py: Validates empty string, single-byte "A", exact 8-byte blocks, and multi-byte Sanskrit UTF-8 strings.
 - test_test_vectors.py: Golden deterministic vectors to guard against regression.
 - test_key_schedule.py: Validates that all round keys are mutually distinct and non-zero.
 - test_api.py: End-to-end FastAPI endpoint integration tests.`,
     vivaQuestion: 'What automated tests did you run to verify the cipher?',
-    vivaAnswer: '38 automated Pytest test cases covering round-trip invariance across 1000 randomized inputs, edge cases (empty strings, Sanskrit Unicode), deterministic golden vectors, and API integration.'
+    vivaAnswer: '51 automated Pytest test cases covering round-trip invariance across 50 randomized inputs, CBC chaining, HMAC authentication, edge cases (empty strings, Sanskrit Unicode), deterministic golden vectors, and API integration.'
   },
   {
     id: 'results',

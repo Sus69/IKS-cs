@@ -28,7 +28,7 @@
 > 2. The diffusion matrix $M$ has determinant $\det(M) = -5265$. Since $-5265$ is odd, it is coprime to 256, guaranteeing an exact inverse matrix $M^{-1}$ in the ring $\mathbb{Z}_{256}$.
 > 3. The 8x8 bit-matrix transposition is self-inverting ($(A^T)^T = A$), and the 11-bit left rotation is inverted by an 11-bit right rotation.
 > 4. The 8-bit S-Box is a verified bijection with an exact inverse table $S^{-1}$.
-> Thus, applying the inverse operations in reverse order strictly guarantees $\text{Decrypt}(\text{Encrypt}(P)) = P$. This invariant is verified by 38 automated unit tests across 1,000 randomized plaintexts."
+> Thus, applying the inverse operations in reverse order strictly guarantees $\text{Decrypt}(\text{Encrypt}(P)) = P$. This invariant is verified by 51 automated unit tests across 50 randomized keys/messages plus parametrized length and round sweeps."
 
 ---
 

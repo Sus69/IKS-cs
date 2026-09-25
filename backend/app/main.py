@@ -21,11 +21,20 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Enable CORS for local Vite development
+# CORS for local development. Explicit origin list (no wildcard) with
+# credentials disabled: the Vite dev proxy serves /api same-origin, and direct
+# browser access only needs simple CORS. Never combine allow_origins=["*"]
+# with allow_credentials=True (browsers reject it; credentialed wildcard CORS
+# would let any site read lab responses).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permits localhost:5173, localhost:3000, etc.
-    allow_credentials=True,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

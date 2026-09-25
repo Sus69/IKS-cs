@@ -1,7 +1,7 @@
 # GŪḌHA (गूढ)
 ### Arthaśāstra-Inspired Symmetric Cipher System
 
-[![Pytest Tests](https://img.shields.io/badge/pytest-38%20passed-brightgreen.svg)]()
+[![Pytest Tests](https://img.shields.io/badge/pytest-51%20passed-brightgreen.svg)]()
 [![Backend](https://img.shields.io/badge/FastAPI-1.0.0-009688.svg)]()
 [![Frontend](https://img.shields.io/badge/React%2019-TypeScript-blue.svg)]()
 [![License](https://img.shields.io/badge/License-MIT%20Educational-gold.svg)]()
@@ -31,6 +31,8 @@
    - $8 \times 8$ bit-matrix transposition & 11-bit cyclic rotation (*Krama*).
    - Invertible circulant modular matrix diffusion over $\mathbb{Z}_{256}$ (*Miśraṇa*).
    - Non-linear 128-bit key schedule derived via the Golden Ratio ($\phi$) (*Vistāra*).
+   - Block modes: ECB (default, demo-compatible) & opt-in CBC chaining (`C_i = E(P_i ⊕ C_{i-1})` with random 8-byte IV).
+   - Optional HMAC-SHA256 authentication tag over the ciphertext (constant-time verify, uniform HTTP 400 on all decrypt failures).
 2. **Step-by-Step Derivation Studio**:
    - Visual telemetry recording every intermediate state: Input $\to$ Whitening $\to$ S-Box $\to$ Permutation $\to$ Diffusion $\to$ Key Addition.
    - Interactive 8-byte state grid highlighting dynamic bit changes.
@@ -63,7 +65,7 @@ IKS-cs/
 │   │   ├── analysis/        # Avalanche, sensitivity, entropy, benchmarks
 │   │   ├── models/          # Pydantic schemas
 │   │   └── main.py          # FastAPI application
-│   ├── tests/               # 38 automated test cases (Pytest)
+│   ├── tests/               # 51 automated test cases (Pytest)
 │   └── requirements.txt
 │
 ├── frontend/
@@ -104,9 +106,12 @@ Open `http://localhost:5173` in your browser.
 
 ### 3. Run Automated Tests
 ```bash
-# Run all 38 backend tests
+# Run all 51 backend tests
 python -m pytest backend/tests -v
 ```
+
+CI (`.github/workflows/ci.yml`) runs the backend suite plus the frontend
+typecheck/build (`npm run build`) on every push and pull request.
 
 ---
 
@@ -121,6 +126,35 @@ Rounds: 6
 Block Count: 2 (12 bytes padded to 16 bytes via PKCS#7)
 Invariant: Decrypt(Ciphertext, Key) == Plaintext
 ```
+
+> The golden vector uses the default ECB mode. ECB encrypts blocks
+> independently (identical plaintext blocks yield identical ciphertext
+> blocks) and is kept for demo compatibility — use `mode: "cbc"` for
+> chained encryption and `authenticate: true` for an HMAC-SHA256 tag.
+
+---
+
+## 🔐 Security Modes (CBC & HMAC)
+
+```bash
+# CBC encrypt (server generates a random IV, returned as iv_hex)
+curl -s -X POST http://127.0.0.1:8000/api/cipher/encrypt \
+  -H 'Content-Type: application/json' \
+  -d '{"plaintext":"SECRET DISPATCH","key":"KAUTILYA","rounds":6,
+       "record_trace":false,"mode":"cbc","authenticate":true}'
+
+# CBC decrypt (iv_hex required; auth_tag_hex verified when provided)
+curl -s -X POST http://127.0.0.1:8000/api/cipher/decrypt \
+  -H 'Content-Type: application/json' \
+  -d '{"ciphertext_hex":"<HEX>","key":"KAUTILYA","rounds":6,
+       "mode":"cbc","iv_hex":"<IV>","auth_tag_hex":"<TAG>"}'
+```
+
+- All decryption failures (bad hex, length, padding, auth mismatch,
+  non-UTF8 output) return a uniform HTTP 400 so status codes do not leak
+  padding state.
+- CORS is restricted to local dev origins (`localhost:5173`, `3000`);
+  the Vite dev server proxies `/api` same-origin.
 
 ---
 

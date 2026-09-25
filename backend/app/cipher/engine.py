@@ -12,6 +12,9 @@ Architecture:
 """
 
 from typing import List, Dict, Any, Tuple, Optional
+import hashlib
+import hmac
+import os
 from .sbox import substitute_block, inv_substitute_block
 from .permutation import permute_block, inv_permute_block
 from .diffusion import mix_block, inv_mix_block
@@ -267,12 +270,22 @@ class Gudha64Cipher:
     def encrypt(
         self,
         plaintext: str | bytes,
-        record_trace: bool = True
+        record_trace: bool = True,
+        mode: str = "ecb",
+        iv_hex: str | None = None,
+        authenticate: bool = False
     ) -> Dict[str, Any]:
         """
         Encrypts arbitrary length plaintext string or bytes.
         Applies PKCS#7 padding and processes blocks.
+        mode="ecb" (default, backward compatible) encrypts blocks independently.
+        mode="cbc" chains blocks: C_i = E(P_i XOR C_{i-1}), C_0 uses the IV.
+        authenticate=True additionally returns an HMAC-SHA256 tag over the
+        ciphertext (keyed by the master key) for tamper detection.
         """
+        if mode not in ("ecb", "cbc"):
+            raise ValueError("mode must be 'ecb' or 'cbc'")
+
         if isinstance(plaintext, str):
             data_bytes = plaintext.encode('utf-8')
         else:
@@ -283,8 +296,37 @@ class Gudha64Cipher:
         ciphertext_bytes = bytearray()
         all_traces: List[Dict[str, Any]] = []
 
+        iv_bytes: bytes | None = None
+        if mode == "cbc":
+            if iv_hex is not None:
+                try:
+                    iv_bytes = bytes.fromhex(iv_hex.strip())
+                except ValueError:
+                    raise ValueError("iv_hex must be a valid hexadecimal string")
+                if len(iv_bytes) != 8:
+                    raise ValueError("IV must be exactly 8 bytes (16 hex chars)")
+            else:
+                iv_bytes = os.urandom(8)
+
         for i in range(num_blocks):
             block = padded_data[i * 8 : (i + 1) * 8]
+            if mode == "cbc":
+                assert iv_bytes is not None
+                prev = iv_bytes if i == 0 else bytes(ciphertext_bytes[(i - 1) * 8 : i * 8])
+                chained = _xor_bytes(block, prev)
+                if record_trace:
+                    all_traces.append({
+                        "block_index": i,
+                        "round": 0,
+                        "step_name": "CBC Chaining XOR",
+                        "sanskrit_term": "Śṛṅkhalā (शृङ्खला)",
+                        "description": f"Block {i}: XOR with {'IV' if i == 0 else f'ciphertext block {i - 1}'} before encryption.",
+                        "state_hex": chained.hex().upper(),
+                        "state_bytes": list(chained),
+                        "round_key_hex": None,
+                        "bits_flipped": _count_flipped_bits(block, chained)
+                    })
+                block = chained
             enc_block, trace = self.encrypt_block(block, block_index=i, record_trace=record_trace)
             ciphertext_bytes.extend(enc_block)
             if record_trace:
@@ -296,6 +338,12 @@ class Gudha64Cipher:
             "ciphertext_hex": bytes(ciphertext_bytes).hex().upper(),
             "block_count": num_blocks,
             "rounds": self.rounds,
+            "mode": mode,
+            "iv_hex": iv_bytes.hex().upper() if iv_bytes is not None else None,
+            "auth_tag_hex": (
+                hmac.new(self.master_key, bytes(ciphertext_bytes), hashlib.sha256).hexdigest().upper()
+                if authenticate else None
+            ),
             "master_key_hex": self.master_key.hex().upper(),
             "round_keys_hex": [k.hex().upper() for k in self.round_keys],
             "derivation_trace": all_traces
@@ -304,11 +352,19 @@ class Gudha64Cipher:
     def decrypt(
         self,
         ciphertext_hex: str,
-        record_trace: bool = False
+        record_trace: bool = False,
+        mode: str = "ecb",
+        iv_hex: str | None = None,
+        expected_tag: str | None = None
     ) -> Dict[str, Any]:
         """
         Decrypts a hex-encoded ciphertext, unpads PKCS#7, and returns restored plaintext.
+        mode="cbc" requires the iv_hex returned by encrypt().
+        expected_tag, when provided, is verified (constant-time) before decryption
+        and a mismatch raises ValueError without revealing padding state.
         """
+        if mode not in ("ecb", "cbc"):
+            raise ValueError("mode must be 'ecb' or 'cbc'")
         try:
             cipher_bytes = bytes.fromhex(ciphertext_hex.strip())
         except ValueError:
@@ -317,6 +373,22 @@ class Gudha64Cipher:
         if len(cipher_bytes) % 8 != 0:
             raise ValueError("Ciphertext length must be a multiple of 8 bytes (64 bits)")
 
+        if expected_tag is not None:
+            computed = hmac.new(self.master_key, cipher_bytes, hashlib.sha256).hexdigest()
+            if not hmac.compare_digest(computed, expected_tag.strip().lower()):
+                raise ValueError("Authentication failed: ciphertext tag mismatch")
+
+        iv_bytes: bytes | None = None
+        if mode == "cbc":
+            if not iv_hex:
+                raise ValueError("iv_hex is required for CBC mode decryption")
+            try:
+                iv_bytes = bytes.fromhex(iv_hex.strip())
+            except ValueError:
+                raise ValueError("iv_hex must be a valid hexadecimal string")
+            if len(iv_bytes) != 8:
+                raise ValueError("IV must be exactly 8 bytes (16 hex chars)")
+
         num_blocks = len(cipher_bytes) // 8
         decrypted_padded = bytearray()
         all_traces: List[Dict[str, Any]] = []
@@ -324,6 +396,23 @@ class Gudha64Cipher:
         for i in range(num_blocks):
             block = cipher_bytes[i * 8 : (i + 1) * 8]
             dec_block, trace = self.decrypt_block(block, block_index=i, record_trace=record_trace)
+            if mode == "cbc":
+                assert iv_bytes is not None
+                prev = iv_bytes if i == 0 else cipher_bytes[(i - 1) * 8 : i * 8]
+                unchained = _xor_bytes(dec_block, prev)
+                if record_trace:
+                    trace.append({
+                        "block_index": i,
+                        "round": 0,
+                        "step_name": "CBC Unchaining XOR",
+                        "sanskrit_term": "Śṛṅkhalā (शृङ्खला)",
+                        "description": f"Block {i}: XOR with {'IV' if i == 0 else f'ciphertext block {i - 1}'} after decryption.",
+                        "state_hex": unchained.hex().upper(),
+                        "state_bytes": list(unchained),
+                        "round_key_hex": None,
+                        "bits_flipped": _count_flipped_bits(dec_block, unchained)
+                    })
+                dec_block = unchained
             decrypted_padded.extend(dec_block)
             if record_trace:
                 all_traces.extend(trace)
@@ -332,7 +421,7 @@ class Gudha64Cipher:
         try:
             plaintext_str = unpadded_bytes.decode('utf-8')
         except UnicodeDecodeError:
-            plaintext_str = unpadded_bytes.decode('latin1', errors='replace')
+            raise ValueError("Decryption produced non-UTF8 bytes (wrong key, mode, IV, or corrupted data)")
 
         return {
             "ciphertext_hex": ciphertext_hex.upper(),
@@ -341,5 +430,6 @@ class Gudha64Cipher:
             "plaintext": plaintext_str,
             "block_count": num_blocks,
             "rounds": self.rounds,
+            "mode": mode,
             "derivation_trace": all_traces
         }
